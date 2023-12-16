@@ -1,5 +1,8 @@
 import 'package:balance/core/database/dao/groups_dao.dart';
+import 'package:balance/core/database/dao/transactions_dao.dart';
+import 'package:balance/core/database/tables/transactions.dart';
 import 'package:balance/main.dart';
+import 'package:balance/ui/group/group.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,10 +15,18 @@ class GroupPage extends StatefulWidget {
 }
 
 class _GroupPageState extends State<GroupPage> {
-  late final GroupsDao _groupsDao = getIt.get<GroupsDao>();
+  final _groupsDao = getIt.get<GroupsDao>();
+  final _txsDao = getIt.get<TransactionsDao>();
 
   final _incomeController = TextEditingController();
   final _expenseController = TextEditingController();
+
+  @override
+  void dispose() {
+    _incomeController.dispose();
+    _expenseController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -25,9 +36,8 @@ class _GroupPageState extends State<GroupPage> {
         body: StreamBuilder(
           stream: _groupsDao.watchGroup(widget.groupId),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return Text("Loading...");
-            }
+            if (!snapshot.hasData) return const Text("Loading...");
+
             return Column(
               mainAxisSize: MainAxisSize.max,
               children: [
@@ -37,8 +47,11 @@ class _GroupPageState extends State<GroupPage> {
                   Expanded(
                     child: TextFormField(
                       controller: _incomeController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))],
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
+                      ],
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(vertical: 10),
                         suffixText: "\$",
@@ -49,17 +62,23 @@ class _GroupPageState extends State<GroupPage> {
                       onPressed: () {
                         final amount = int.parse(_incomeController.text);
                         final balance = snapshot.data?.balance ?? 0;
-                        _groupsDao.adjustBalance(balance + amount, widget.groupId);
-                        _incomeController.text = "";
+                        _groupsDao.adjustBalance(
+                            balance + amount, widget.groupId);
+                        _txsDao.insert(widget.groupId, amount, TxMode.income);
+
+                        _incomeController.clear();
                       },
-                      child: Text("Add income")),
+                      child: const Text("Add income")),
                 ]),
                 Row(children: [
                   Expanded(
                     child: TextFormField(
                       controller: _expenseController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))],
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
+                      ],
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(vertical: 10),
                         suffixText: "\$",
@@ -70,11 +89,18 @@ class _GroupPageState extends State<GroupPage> {
                       onPressed: () {
                         final amount = int.parse(_expenseController.text);
                         final balance = snapshot.data?.balance ?? 0;
-                        _groupsDao.adjustBalance(balance - amount, widget.groupId);
-                        _expenseController.text = "";
+                        _groupsDao.adjustBalance(
+                            balance - amount, widget.groupId);
+                        _txsDao.insert(widget.groupId, amount, TxMode.expense);
+                        _expenseController.clear();
                       },
-                      child: Text("Add expense")),
+                      child: const Text("Add expense")),
                 ]),
+                const SizedBox(height: 50),
+                TransactionsView(
+                  snapshot.data!,
+                  snapshot.data?.balance ?? 0,
+                ),
               ],
             );
           },
